@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	// "log"
 	"os"
 	"sort"
 	"strconv"
@@ -79,7 +80,7 @@ func main() {
 }
 
 func buildCard(c string) *card {
-	if len(c) != 3 || c[1] < '1' || c[1] > '9' {
+	if len(c) < 3 || len(c) > 4 || (len(c) == 4 && (c[2] < '0' || c[2] > '3')) || c[1] < '1' || c[1] > '9' {
 		return nil
 	}
 	n := c[1] - '0'
@@ -159,9 +160,9 @@ func checkTable(t []*card, is []int, current int) bool {
 		if found {
 			continue
 		}
-		// fmt.Println(is)
-		// fmt.Println(i)
-		// fmt.Println(current)
+		// log.Println(is)
+		// log.Println(i)
+		// log.Println(current)
 		var game []*card
 		for j := current; j < len(is); j++ {
 			game = append(game, t[is[j]])
@@ -169,8 +170,8 @@ func checkTable(t []*card, is []int, current int) bool {
 		game = append(game, t[i])
 		if len(is) - current == 1 {
 			if !isGamePrefix(t[is[len(is)-1]], t[i]) {
-				// fmt.Println("GamePrefix", len(is)-1, t[is[len(is)-1]], i, t[i])
-				// fmt.Println(t)
+				// log.Println("GamePrefix", len(is)-1, t[is[len(is)-1]], i, t[i])
+				// log.Println(t)
 				continue
 			}
 		} else if len(is) - current == 2 {
@@ -259,8 +260,8 @@ i-1], g[i])) {
 			seq = false
 		}
 	}
-	// fmt.Println(g)
-	// fmt.Println("game", kind || seq)
+	// log.Println(g)
+	// log.Println("game", kind || seq)
 	return kind || seq
 }
 
