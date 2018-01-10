@@ -20,32 +20,66 @@ func main() {
 			return
 		case 't':
 			// Adds the following card to the table.
-			if c := buildCard(command); c != nil {
-				table = append(table, c)
-				sort.Sort(cardSlice(table))
+			c := buildCard(command)
+			if c == nil {
+				fmt.Println("Invalid command")
 				continue
 			}
-			fmt.Println("Invalid command")
+			table = append(table, c)
+			sort.Sort(cardSlice(table))
 		case 'h':
 			// Adds the following card to the hand.
-			if c := buildCard(command); c != nil {
-				hand = append(hand, c)
-				sort.Sort(cardSlice(hand))
+			c := buildCard(command)
+			if c == nil {
+				fmt.Println("Invalid command")
 				continue
 			}
-			fmt.Println("Invalid command")
+			hand = append(hand, c)
+			sort.Sort(cardSlice(hand))
+		case 'p':
+			c := buildCard(command)
+			if c == nil {
+				fmt.Println("Invalid command")
+				continue
+			}
+			var i int
+			var h *card
+			for i, h = range hand {
+				if *h == *c {
+					break
+				}
+			}
+			hand = append(hand[:i], hand[i+1:]...)
+			table = append(table, c)
+			sort.Sort(cardSlice(table))
+		case 'r':
+			c := buildCard(command)
+			if c == nil {
+				fmt.Println("Invalid command")
+				continue
+			}
+			var i int
+			var t *card
+			for i, t = range table {
+				if *t == *c {
+					break
+				}
+			}
+			table = append(table[:i], table[i+1:]...)
 		case 'c':
 			// Checks if it's possible to play any card on the hand.
 			findCard()
 			findGame()
 		case 'd':
 			fmt.Println(hand, table)
+		default:
+			fmt.Println("Invalid command")
 		}
 	}
 }
 
 func buildCard(c string) *card {
-	if c[1] < '1' || c[1] > '9' {
+	if len(c) != 3 || c[1] < '1' || c[1] > '9' {
 		return nil
 	}
 	n := c[1] - '0'
@@ -88,47 +122,76 @@ func (c cardSlice) Swap(i, j int) {
 	c[i], c[j] = c[j], c[i]
 }
 
-func findCard() bool {
+func findCard() {
 	for _, c := range hand {
 		t := append([]*card{c}, table...)
 		sort.Sort(cardSlice(t))
-		if checkTable(t, [][]*card{}, []*card{}, 0) {
+		if checkTable(t, []int{}, 0) {
 			fmt.Println(c)
 		}
 	}
 }
 
-func checkTable(t []*card, games [][]*card, current []*card, li int) bool {
-	total := 0
-	for _, g := range games {
-		total += len(g)
-	}
-	total += len(current)
-	if total == len(t) {
-		games = append(games, current)
-		fmt.Println(games)
+func checkTable(t []*card, is []int, current int) bool {
+	if len(is) == len(t) {
+		var game []*card
+		for j := current; j < len(is); j++ {
+			game = append(game, t[is[j]])
+		}
+		if !isGame(game) {
+			return false
+		}
+		var organized []*card
+		for _, i := range is {
+			organized = append(organized, t[i])
+		}
+		fmt.Println(organized)
 		return true
 	}
-	for i := li + 1; i < len(t); i++ {
-		if len(p) == 1 && !isGamePrefix(p[0], t[i]) {
+	for i := range t {
+		found := false
+		for _, li := range is {
+			if i == li {
+				found = true
+				break
+			}
+		}
+		if found {
 			continue
 		}
-		p = append(p, t[i])
-		restore := false
-		if len(p) > 3 && !isGame(p) {
-			p := p[len(p)-1]
-			restore := true
-			games = append(games, p)
-			p = []*card{t[i]}
+		// fmt.Println(is)
+		// fmt.Println(i)
+		// fmt.Println(current)
+		var game []*card
+		for j := current; j < len(is); j++ {
+			game = append(game, t[is[j]])
 		}
-		if checkTable(t, p, i) {
+		game = append(game, t[i])
+		if len(is) - current == 1 {
+			if !isGamePrefix(t[is[len(is)-1]], t[i]) {
+				// fmt.Println("GamePrefix", len(is)-1, t[is[len(is)-1]], i, t[i])
+				// fmt.Println(t)
+				continue
+			}
+		} else if len(is) - current == 2 {
+			if !isGame(game) {
+				continue
+			}
+		} else if len(is) - current > 2 { 
+			if !isGame(game) {
+				is = append(is, i)
+				if checkTable(t, is, len(is)-1) {
+					return true
+				}
+				is = is[:len(is)-1]
+				continue
+			}
+		}
+		is = append(is, i)
+		if checkTable(t, is, current) {
 			return true
 		}
-		p = p[:len(previous)-1]
-		if restore {
-			p = games[len(games)-1]
-			games = games[:len(games)-1]
-		}
+		is = is[:len(is)-1]
 	}
 	return false
 }
@@ -181,10 +244,24 @@ func isGamePrefix(c1, c2 *card) bool {
 }
 
 func isGame(g []*card) bool {
-	// 3 of a kind
-	return g[0].n == g[1].n && g[0].n == g[2].n && g[0].s != g[1].s && g[0].s != g[2].s && g[1].s != g[2].s ||
-		// sequence
-		follows(g[0], g[1]) && followsEnd(g[1], g[2])
+	// 3-4 of a kind
+	if len(g) < 3 {
+		return false
+	}
+	kind := true
+	seq := true
+	for i := 1; i < len(g); i++ {
+		if g[i].n != g[0].n || g[i].s == g[0].s {
+			kind = false
+		}
+		if !(follows(g[i-1], g[i]) || i == len(g) - 1 && followsEnd(g[
+i-1], g[i])) {
+			seq = false
+		}
+	}
+	// fmt.Println(g)
+	// fmt.Println("game", kind || seq)
+	return kind || seq
 }
 
 func follows(c1, c2 *card) bool {
