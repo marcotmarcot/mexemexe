@@ -71,6 +71,7 @@ func main() {
 			// Checks if it's possible to play any card on the hand.
 			findCard()
 			findGame()
+			fmt.Println("Done")
 		case 'd':
 			fmt.Println(hand, table)
 		default:
@@ -149,7 +150,11 @@ func checkTable(t []*card, is []int, current int) bool {
 		fmt.Println(organized)
 		return true
 	}
-	for i := range t {
+	i := 0
+	if len(is) > 0 && len(is) - current < 2 {
+		i = is[len(is)-1] + 1
+	}
+	for ; i < len(t); i++ {
 		found := false
 		for _, li := range is {
 			if i == li {
@@ -160,6 +165,7 @@ func checkTable(t []*card, is []int, current int) bool {
 		if found {
 			continue
 		}
+		// log.Println(t)
 		// log.Println(is)
 		// log.Println(i)
 		// log.Println(current)
@@ -178,7 +184,7 @@ func checkTable(t []*card, is []int, current int) bool {
 			if !isGame(game) {
 				continue
 			}
-		} else if len(is) - current > 2 { 
+		} else if len(is) - current > 2 {
 			if !isGame(game) {
 				is = append(is, i)
 				if checkTable(t, is, len(is)-1) {
@@ -187,6 +193,15 @@ func checkTable(t []*card, is []int, current int) bool {
 				is = is[:len(is)-1]
 				continue
 			}
+			is = append(is, i)
+			if checkTable(t, is, current) {
+				return true
+			}
+			if checkTable(t, is, len(is)-1) {
+				return true
+			}
+			is = is[:len(is)-1]
+			continue
 		}
 		is = append(is, i)
 		if checkTable(t, is, current) {
@@ -252,11 +267,12 @@ func isGame(g []*card) bool {
 	kind := true
 	seq := true
 	for i := 1; i < len(g); i++ {
-		if g[i].n != g[0].n || g[i].s == g[0].s {
-			kind = false
+		for j := 0; j < i; j++ {
+			if g[i].n != g[j].n || g[i].s == g[j].s {
+				kind = false
+			}
 		}
-		if !(follows(g[i-1], g[i]) || i == len(g) - 1 && followsEnd(g[
-i-1], g[i])) {
+		if !(follows(g[i-1], g[i]) || i == len(g) - 1 && followsEnd(g[i-1], g[i])) {
 			seq = false
 		}
 	}
@@ -270,5 +286,7 @@ func follows(c1, c2 *card) bool {
 }
 
 func followsEnd(c1, c2 *card) bool {
-	return c1.s == c2.s && (c1.n + 1 == c2.n) || (c1.n == 13 && c2.n == 1)
+	// log.Println("followsEnd", c1, c2)
+	// log.Println(c1.s == c2.s && (c1.n + 1 == c2.n || c1.n == 13 && c2.n == 1))
+	return c1.s == c2.s && (c1.n + 1 == c2.n || c1.n == 13 && c2.n == 1)
 }
