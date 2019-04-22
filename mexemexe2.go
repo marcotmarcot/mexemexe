@@ -1,5 +1,4 @@
 // * Check before adding the same card 3 times
-// * Remove index out of range in parseCard
 package main
 
 import (
