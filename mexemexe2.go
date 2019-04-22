@@ -54,7 +54,7 @@ func newMexemexe() *mexemexe {
 
 func (m *mexemexe) findCard() {
 	for _, c := range m.h {
-		log.Println(c)
+		log.Println("findCard", c)
 		if m.t.check(c) {
 			fmt.Println(c)
 			return
@@ -94,7 +94,8 @@ func (t *table) removeCard(c card) {
 func (t *table) check(c card) bool {
 	t.newCard(c)
 	defer t.removeCard(c)
-	return newProcessing(t).check()
+	defer log.Println(t.s)
+	return newProcessing(t).check(0)
 }
 
 type states struct {
@@ -103,6 +104,10 @@ type states struct {
 
 func newStates() *states {
 	return &states{[]state{noState, noState}}
+}
+
+func (ss *states) String() string {
+	return fmt.Sprintf("%v", ss.ss)
 }
 
 func (ss *states) has(s state) bool {
@@ -121,7 +126,7 @@ func (ss *states) update(from, to state) {
 			return
 		}
 	}
-	log.Fatal("No from found")
+	log.Fatal("No from found ", from, to)
 }
 
 type state int
@@ -141,36 +146,38 @@ func newProcessing(t *table) *processing {
 	return &processing{nil, t}
 }
 
-func (p *processing) check() bool {
-	for i := 0; i < len(p.t.cs); i++ {
-		c := p.t.cs[i]
-		log.Println(c)
-		log.Println(p.gs)
-		if !p.t.s[c].has(inTable) {
-			log.Println("InTable")
-			continue
+func (p *processing) check(i int) bool {
+	if i == len(p.t.cs) {
+		for _, c := range p.t.cs {
+			if p.t.s[c].has(inTable) {
+				return false
+			}
 		}
-		if p.buildKind(i) {
-			log.Println("Kind")
-			continue
-		}
-		if p.buildSeq(i) {
-			log.Println("Seq")
-			continue
-		}
-		log.Println("Drop")
-		i = p.dropGame()
-		if i == -1 {
-			return false
-		}
+		return true
 	}
-	return true
+	c := p.t.cs[i]
+	log.Println("check", i, len(p.t.cs), c)
+	log.Println("p.gs", p.gs)
+	if !p.t.s[c].has(inTable) {
+		log.Println("InTable")
+		return p.check(i + 1)
+	}
+	if p.buildKind(i) {
+		return true
+	}
+	if p.buildSeq(i) {
+		return true
+	}
+	if c.number() == 1 {
+		return p.check(i + 1)
+	}
+	return false
 }
 
 func (p *processing) buildKind(i int) bool {
 	c := p.t.cs[i]
 	cn := c.number()
-	g := newGame(p.t, i)
+	g := newGame(p.t)
 	for s := 0; s < 4; s++ {
 		nc := newCard(cn, suit(s))
 		if !p.t.s[nc].has(inTable) {
@@ -178,14 +185,14 @@ func (p *processing) buildKind(i int) bool {
 		}
 		g.addCard(nc)
 	}
-	return p.addGame(g)
+	return p.addGame(i, g)
 }
 
 func (p *processing) buildSeq(i int) bool {
 	c := p.t.cs[i]
 	cn := c.number()
 	cs := c.suit()
-	g := newGame(p.t, i)
+	g := newGame(p.t)
 	g.addCard(c)
 	for n := cn + 1; n <= 14; n++ {
 		en := n
@@ -198,42 +205,45 @@ func (p *processing) buildSeq(i int) bool {
 		}
 		g.addCard(nc)
 	}
-	return p.addGame(g)
+	return p.addGame(i, g)
 }
 
-// Returns the index from the card that created this game.
-func (p *processing) dropGame() int {
-	g := p.gs[len(p.gs)-1]
-	if g.dropGame() {
-		p.gs = p.gs[:len(p.gs)-1]
-	}
-	if len(p.gs) == 0 {
-		// There's no game possible.
-		return -1
-	}
-	return g.i
-}
-
-func (p *processing) addGame(g *game) bool {
+func (p *processing) addGame(i int, g *game) bool {
 	if len(g.cs) < 3 {
 		g.destroy()
 		return false
 	}
 	p.gs = append(p.gs, g)
-	return true
+	defer p.destroyGame()
+	if p.check(i + 1) {
+		return true
+	}
+	for p.dropGame() {
+		if p.check(i + 1) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *processing) destroyGame() {
+	log.Println("destroy", len(p.gs))
+	p.gs[len(p.gs)-1].destroy()
+	p.gs = p.gs[:len(p.gs)-1]
+}
+
+func (p *processing) dropGame() bool {
+	return p.gs[len(p.gs)-1].dropGame()
 }
 
 type game struct {
 	t *table
 	
-	// The index of the first card of the game.
-	i int
-
 	cs []card
 }
 
-func newGame(t *table, i int) *game {
-	return &game{t, i, nil}
+func newGame(t *table) *game {
+	return &game{t, nil}
 }
 
 func (g *game) String() string {
@@ -253,12 +263,11 @@ func (g *game) destroy() {
 
 func (g *game) dropGame() bool {
 	if len(g.cs) <= 3 {
-		g.destroy()
-		return true
+		return false
 	}
 	g.t.s[g.cs[len(g.cs)-1]].update(inProcessing, inTable)
 	g.cs = g.cs[:len(g.cs)-1]
-	return false
+	return true
 }
 
 type card int
