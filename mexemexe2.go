@@ -1,3 +1,5 @@
+// * Check before adding the same card 3 times
+// * Remove index out of range in parseCard
 package main
 
 import (
@@ -22,22 +24,22 @@ func main() {
 			// Adds the following card to the table.
 			c := parseCard(command)
 			if c == 0 {
-				fmt.Println("Invalid command: ", command)
+				fmt.Println("Invalid command:", command)
 				continue
 			}
 			if err := m.t.newCard(c); err != nil {
-				fmt.Println("Invalid command: ", command, err)
+				fmt.Println("Invalid command:", command, err)
 				continue
 			}
 		case 'h':
 			// Adds the following card to the hand.
 			c := parseCard(command)
 			if c == 0 {
-				fmt.Println("Invalid command: ", command)
+				fmt.Println("Invalid command:", command)
 				continue
 			}
 			if err := m.h.newCard(c); err != nil {
-				fmt.Println("Invalid command: ", command, err)
+				fmt.Println("Invalid command:", command, err)
 				continue
 			}
 			// log.Println(m.h.cs)
@@ -45,7 +47,7 @@ func main() {
 			// Checks if it's possible to play any card on the hand.
 			cs, err := m.findCard()
 			if err != nil {
-				fmt.Println("Invalid command: ", command, err)
+				fmt.Println("Invalid command:", command, err)
 				continue
 			}
 			if cs == nil {
@@ -54,35 +56,35 @@ func main() {
 			}
 			for _, c := range cs {
 				if err := m.h.removeCard(c); err != nil {
-					log.Fatal("Invalid command: ", command, err)
+					log.Fatal("Invalid command:", command, err)
 				}
 				if err := m.t.newCard(c); err != nil {
-					log.Fatal("Invalid command: ", command, err)
+					log.Fatal("Invalid command:", command, err)
 				}
 			}
 			fmt.Println(cs)
 		case 'R':
 			c := parseCard(command)
 			if c == 0 {
-				fmt.Println("Invalid command: ", command)
+				fmt.Println("Invalid command:", command)
 				continue
 			}
 			if err := m.h.removeCard(c); err != nil {
-				fmt.Println("Invalid command: ", command, err)
+				fmt.Println("Invalid command:", command, err)
 				continue
 			}
 		case 'r':
 			c := parseCard(command)
 			if c == 0 {
-				fmt.Println("Invalid command: ", command)
+				fmt.Println("Invalid command:", command)
 				continue
 			}
 			if err := m.t.removeCard(c); err != nil {
-				fmt.Println("Invalid command: ", command, err)
+				fmt.Println("Invalid command:", command, err)
 				continue
 			}
 		default:
-			fmt.Println("Invalid command: ", command)
+			fmt.Println("Invalid command:", command)
 		}
 	}
 }
@@ -133,7 +135,11 @@ func newTable() *table {
 
 func (t *table) newCard(c card) error {
 	insert(&t.cs, c)
-	return t.s[c].update(noState, inTable)
+	if err := t.s[c].update(noState, inTable); err != nil {
+		log.Println("newCard", c)
+		return err
+	}
+	return nil
 }
 
 func (t *table) removeCard(c card) error {
@@ -147,7 +153,11 @@ func (t *table) removeCard(c card) error {
 		return fmt.Errorf("remove %v %v", t.cs, c)
 	}
 	t.cs = append(t.cs[:i], t.cs[i+1:]...)
-	return t.s[c].update(inTable, noState)
+	if err := t.s[c].update(inTable, noState); err != nil {
+		log.Println("removeCard", c)
+		return err
+	}
+	return nil
 }
 
 func (t *table) check(c card) (found bool, rerr error) {
@@ -232,7 +242,7 @@ func (ss *states) update(from, to state) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("No from found %v %v", from, to)
+	return fmt.Errorf("No from found %v %v %v", from, to, ss.ss)
 }
 
 type state int
@@ -345,6 +355,7 @@ type game struct {
 func newGame(t *table, cs []card) (*game, error) {
 	for _, c := range cs {
 		if err := t.s[c].update(inTable, inProcessing); err != nil {
+			log.Println("newGame", c)
 			return nil, err
 		}
 	}
@@ -358,6 +369,7 @@ func (g *game) String() string {
 func (g *game) destroy() error {
 	for _, c := range g.cs {
 		if err := g.t.s[c].update(inProcessing, inTable); err != nil {
+			log.Println("destroy", c)
 			return err
 		}
 	}
@@ -368,7 +380,9 @@ func (g *game) dropGame() (bool, error) {
 	if len(g.cs) <= 3 {
 		return false, nil
 	}
-	if err := g.t.s[g.cs[len(g.cs)-1]].update(inProcessing, inTable); err != nil {
+	c := g.cs[len(g.cs)-1]
+	if err := g.t.s[c].update(inProcessing, inTable); err != nil {
+		log.Println("dropGame", c)
 		return false, err
 	}
 	g.cs = g.cs[:len(g.cs)-1]
@@ -389,7 +403,7 @@ func newCard(n int, s suit) card {
 }
 
 func parseCard(c string) card {
-	if len(c) < 3 || len(c) > 4 || (len(c) == 4 && (c[2] < '0' || c[2] > '3')) || c[1] < '1' || c[1] > '9' {
+	if len(c) < 3 || len(c) > 4 || (len(c) == 4 && (c[2] < '0' || c[2] > '3')) || c[1] < '1' || c[1] > '9' || (len(c) == 3 && c[2] >= '0' && c[2] <= '3') {
 		return 0
 	}
 	n := c[1] - '0'
