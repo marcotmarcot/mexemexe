@@ -128,13 +128,16 @@ func findCard() {
 	for _, c := range hand {
 		t := append([]*card{c}, table...)
 		sort.Sort(cardSlice(t))
-		if checkTable(t, []int{}, 0) {
+		if checkTable(t, []int{}, 0, -1) {
 			fmt.Println(c)
 		}
 	}
 }
 
-func checkTable(t []*card, is []int, current int) bool {
+// current is the start of the game being constructed. It's an index to the
+// slice is. oldcurrent is the start of the game built before that, or -1 if
+// this is the first game.
+func checkTable(t []*card, is []int, current int, oldcurrent int) bool {
 	if len(is) == len(t) {
 		var game []*card
 		for j := current; j < len(is); j++ {
@@ -150,8 +153,8 @@ func checkTable(t []*card, is []int, current int) bool {
 		fmt.Println(organized)
 		return true
 	}
-	i := 0
-	if len(is) > 0 && len(is) - current < 2 {
+	i := oldcurrent + 1
+	if len(is) > 0 && len(is)-current < 2 {
 		i = is[len(is)-1] + 1
 	}
 	for ; i < len(t); i++ {
@@ -169,42 +172,52 @@ func checkTable(t []*card, is []int, current int) bool {
 		// log.Println(is)
 		// log.Println(i)
 		// log.Println(current)
+
+		// Builds object for game being constructed.
 		var game []*card
 		for j := current; j < len(is); j++ {
 			game = append(game, t[is[j]])
 		}
+
+		// Tries to put the current card on the game being constructed.
 		game = append(game, t[i])
-		if len(is) - current == 1 {
+
+		if len(is)-current == 1 {
+			// The game being constructed has 1 card plus the current, 2 cards.
 			if !isGamePrefix(t[is[len(is)-1]], t[i]) {
 				// log.Println("GamePrefix", len(is)-1, t[is[len(is)-1]], i, t[i])
 				// log.Println(t)
 				continue
 			}
-		} else if len(is) - current == 2 {
+		} else if len(is)-current == 2 {
+			// The game being constructed has 2 card plus the current, 3 cards.
 			if !isGame(game) {
 				continue
 			}
-		} else if len(is) - current > 2 {
+		} else if len(is)-current > 2 {
+			// The game being constructed has more than 3 cards, so it might be
+			// breaked in two.
 			if !isGame(game) {
+				// This card should start a new game.
 				is = append(is, i)
-				if checkTable(t, is, len(is)-1) {
+				if checkTable(t, is, len(is)-1, current) {
 					return true
 				}
 				is = is[:len(is)-1]
 				continue
 			}
 			is = append(is, i)
-			if checkTable(t, is, current) {
+			if checkTable(t, is, current, oldcurrent) {
 				return true
 			}
-			if checkTable(t, is, len(is)-1) {
+			if checkTable(t, is, len(is)-1, current) {
 				return true
 			}
 			is = is[:len(is)-1]
 			continue
 		}
 		is = append(is, i)
-		if checkTable(t, is, current) {
+		if checkTable(t, is, current, oldcurrent) {
 			return true
 		}
 		is = is[:len(is)-1]
@@ -216,7 +229,7 @@ func findGame() bool {
 	found := false
 	var h []*card
 	for i, c := range hand {
-		if i > 0 && *hand[i - 1] == *hand[i] {
+		if i > 0 && *hand[i-1] == *hand[i] {
 			continue
 		}
 		h = append(h, c)
@@ -260,10 +273,10 @@ func isGamePrefix(c1, c2 *card) bool {
 }
 
 func isGame(g []*card) bool {
-	// 3-4 of a kind
 	if len(g) < 3 {
 		return false
 	}
+	// 3-4 of a kind
 	kind := true
 	seq := true
 	for i := 1; i < len(g); i++ {
@@ -272,7 +285,7 @@ func isGame(g []*card) bool {
 				kind = false
 			}
 		}
-		if !(follows(g[i-1], g[i]) || i == len(g) - 1 && followsEnd(g[i-1], g[i])) {
+		if !(follows(g[i-1], g[i]) || i == len(g)-1 && followsEnd(g[i-1], g[i])) {
 			seq = false
 		}
 	}
@@ -282,11 +295,11 @@ func isGame(g []*card) bool {
 }
 
 func follows(c1, c2 *card) bool {
-	return c1.s == c2.s && c1.n + 1 == c2.n
+	return c1.s == c2.s && c1.n+1 == c2.n
 }
 
 func followsEnd(c1, c2 *card) bool {
 	// log.Println("followsEnd", c1, c2)
 	// log.Println(c1.s == c2.s && (c1.n + 1 == c2.n || c1.n == 13 && c2.n == 1))
-	return c1.s == c2.s && (c1.n + 1 == c2.n || c1.n == 13 && c2.n == 1)
+	return c1.s == c2.s && (c1.n+1 == c2.n || c1.n == 13 && c2.n == 1)
 }
