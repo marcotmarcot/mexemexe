@@ -33,10 +33,26 @@ func main() {
 				fmt.Println("Invalid command: ", command)
 				continue
 			}
-			insert(&m.h, c)
+			m.h.newCard(c)
+			// log.Println(m.h.cs)
 		case 'c':
 			// Checks if it's possible to play any card on the hand.
 			m.findCard()
+		case 'p':
+			c := parseCard(command)
+			if c == 0 {
+				fmt.Println("Invalid command: ", command)
+				continue
+			}
+			m.h.removeCard(c)
+			m.t.newCard(c)
+		case 'r':
+			c := parseCard(command)
+			if c == 0 {
+				fmt.Println("Invalid command: ", command)
+				continue
+			}
+			m.t.removeCard(c)
 		default:
 			fmt.Println("Invalid command: ", command)
 		}
@@ -45,18 +61,30 @@ func main() {
 
 type mexemexe struct {
 	t *table
-	h []card
+	h *table
 }
 
 func newMexemexe() *mexemexe {
-	return &mexemexe{newTable(), nil}
+	return &mexemexe{newTable(), newTable()}
 }
 
 func (m *mexemexe) findCard() {
-	for _, c := range m.h {
+	log.Println("findCard hand", m.h.cs)
+	log.Println("findCard table", m.t.cs)
+	for _, c := range m.h.cs {
 		log.Println("findCard", c)
 		if m.t.check(c) {
 			fmt.Println(c)
+			return
+		}
+	}
+	for i := range m.h.cs {
+		if g := m.h.findGame(kindGame, i, true); g != nil {
+			fmt.Println(g)
+			return
+		}
+		if g := m.h.findGame(seqGame, i, true); g != nil {
+			fmt.Println(g)
 			return
 		}
 	}
@@ -94,8 +122,48 @@ func (t *table) removeCard(c card) {
 func (t *table) check(c card) bool {
 	t.newCard(c)
 	defer t.removeCard(c)
-	defer log.Println(t.s)
+	// defer log.Println(t.s)
 	return newProcessing(t).check(0)
+}
+
+func (t *table) findGame(ty gameType, i int, stopAtThree bool) []card {
+	var g []card
+	c := t.cs[i]
+	log.Println("findGame", c)
+	cn := c.number()
+	if ty == kindGame {
+		for s := 0; s < 4; s++ {
+			nc := newCard(cn, suit(s))
+			if !t.s[nc].has(inTable) {
+				continue
+			}
+			g = append(g, nc)
+			if stopAtThree && len(g) == 3 {
+				return g
+			}
+		}
+	} else {
+		cs := c.suit()
+		g = append(g, c)
+		for n := cn + 1; n <= 14; n++ {
+			en := n
+			if en == 14 {
+				en = 1
+			}
+			nc := newCard(en, cs)
+			if !t.s[nc].has(inTable) {
+				break
+			}
+			g = append(g, nc)
+			if stopAtThree && len(g) == 3 {
+				return g
+			}
+		}
+	}
+	if len(g) < 3 {
+		return nil
+	}
+	return g
 }
 
 type states struct {
@@ -120,6 +188,7 @@ func (ss *states) has(s state) bool {
 }
 
 func (ss *states) update(from, to state) {
+	// log.Println("states", ss)
 	for i, s := range ss.ss {
 		if s == from {
 			ss.ss[i] = to
@@ -156,16 +225,16 @@ func (p *processing) check(i int) bool {
 		return true
 	}
 	c := p.t.cs[i]
-	log.Println("check", i, len(p.t.cs), c)
 	log.Println("p.gs", p.gs)
+	log.Println("check", i, len(p.t.cs), c)
 	if !p.t.s[c].has(inTable) {
 		log.Println("InTable")
 		return p.check(i + 1)
 	}
-	if p.buildKind(i) {
+	if p.buildGame(kindGame, i) {
 		return true
 	}
-	if p.buildSeq(i) {
+	if p.buildGame(seqGame, i) {
 		return true
 	}
 	if c.number() == 1 {
@@ -174,46 +243,16 @@ func (p *processing) check(i int) bool {
 	return false
 }
 
-func (p *processing) buildKind(i int) bool {
-	c := p.t.cs[i]
-	cn := c.number()
-	g := newGame(p.t)
-	for s := 0; s < 4; s++ {
-		nc := newCard(cn, suit(s))
-		if !p.t.s[nc].has(inTable) {
-			continue
-		}
-		g.addCard(nc)
-	}
-	return p.addGame(i, g)
-}
-
-func (p *processing) buildSeq(i int) bool {
-	c := p.t.cs[i]
-	cn := c.number()
-	cs := c.suit()
-	g := newGame(p.t)
-	g.addCard(c)
-	for n := cn + 1; n <= 14; n++ {
-		en := n
-		if en == 14 {
-			en = 1
-		}
-		nc := newCard(en, cs)
-		if !p.t.s[nc].has(inTable) {
-			break
-		}
-		g.addCard(nc)
-	}
-	return p.addGame(i, g)
-}
-
-func (p *processing) addGame(i int, g *game) bool {
-	if len(g.cs) < 3 {
-		g.destroy()
+func (p *processing) buildGame(ty gameType, i int) bool {
+	g := p.t.findGame(ty, i, false)
+	if g == nil {
 		return false
 	}
-	p.gs = append(p.gs, g)
+	return p.addGame(i, g)
+}
+
+func (p *processing) addGame(i int, g []card) bool {
+	p.gs = append(p.gs, newGame(p.t, g))
 	defer p.destroyGame()
 	if p.check(i + 1) {
 		return true
@@ -238,21 +277,18 @@ func (p *processing) dropGame() bool {
 
 type game struct {
 	t *table
-	
 	cs []card
 }
 
-func newGame(t *table) *game {
-	return &game{t, nil}
+func newGame(t *table, cs []card) *game {
+	for _, c := range cs {
+		t.s[c].update(inTable, inProcessing)
+	}
+	return &game{t, cs}
 }
 
 func (g *game) String() string {
 	return fmt.Sprintf("%v", g.cs)
-}
-
-func (g *game) addCard(c card) {
-	g.t.s[c].update(inTable, inProcessing)
-	g.cs = append(g.cs, c)
 }
 
 func (g *game) destroy() {
@@ -269,6 +305,13 @@ func (g *game) dropGame() bool {
 	g.cs = g.cs[:len(g.cs)-1]
 	return true
 }
+
+type gameType int
+
+const (
+	kindGame gameType = iota
+	seqGame
+)
 
 type card int
 
@@ -346,5 +389,20 @@ func insert(cs *[]card, c card) {
 			break
 		}
 	}
+	log.Println("insert", *cs, c, i)
 	*cs = append((*cs)[:i], append([]card{c}, (*cs)[i:]...)...)
+	log.Println("insert", *cs)
+}
+
+func remove(cs *[]card, c card) {
+	var i int
+	for i = 0; i < len(*cs); i++ {
+		if (*cs)[i] == c {
+			break
+		}
+	}
+	if i == len(*cs) {
+		log.Fatal("Remove unexisting")
+	}
+	*cs = append((*cs)[:i], (*cs)[i+1:]...)
 }
