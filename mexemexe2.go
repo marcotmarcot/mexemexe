@@ -25,7 +25,10 @@ func main() {
 				fmt.Println("Invalid command: ", command)
 				continue
 			}
-			m.t.newCard(c)
+			if err := m.t.newCard(c); err != nil {
+				fmt.Println("Invalid command: ", command, err)
+				continue
+			}
 		case 'h':
 			// Adds the following card to the hand.
 			c := parseCard(command)
@@ -33,26 +36,51 @@ func main() {
 				fmt.Println("Invalid command: ", command)
 				continue
 			}
-			m.h.newCard(c)
+			if err := m.h.newCard(c); err != nil {
+				fmt.Println("Invalid command: ", command, err)
+				continue
+			}
 			// log.Println(m.h.cs)
 		case 'c':
 			// Checks if it's possible to play any card on the hand.
-			m.findCard()
-		case 'p':
+			cs, err := m.findCard()
+			if err != nil {
+				fmt.Println("Invalid command: ", command, err)
+				continue
+			}
+			if cs == nil {
+				fmt.Println("Not found")
+				continue
+			}
+			for _, c := range cs {
+				if err := m.h.removeCard(c); err != nil {
+					log.Fatal("Invalid command: ", command, err)
+				}
+				if err := m.t.newCard(c); err != nil {
+					log.Fatal("Invalid command: ", command, err)
+				}
+			}
+			fmt.Println(cs)
+		case 'R':
 			c := parseCard(command)
 			if c == 0 {
 				fmt.Println("Invalid command: ", command)
 				continue
 			}
-			m.h.removeCard(c)
-			m.t.newCard(c)
+			if err := m.h.removeCard(c); err != nil {
+				fmt.Println("Invalid command: ", command, err)
+				continue
+			}
 		case 'r':
 			c := parseCard(command)
 			if c == 0 {
 				fmt.Println("Invalid command: ", command)
 				continue
 			}
-			m.t.removeCard(c)
+			if err := m.t.removeCard(c); err != nil {
+				fmt.Println("Invalid command: ", command, err)
+				continue
+			}
 		default:
 			fmt.Println("Invalid command: ", command)
 		}
@@ -68,27 +96,26 @@ func newMexemexe() *mexemexe {
 	return &mexemexe{newTable(), newTable()}
 }
 
-func (m *mexemexe) findCard() {
+func (m *mexemexe) findCard() ([]card, error) {
 	log.Println("findCard hand", m.h.cs)
 	log.Println("findCard table", m.t.cs)
 	for _, c := range m.h.cs {
 		log.Println("findCard", c)
-		if m.t.check(c) {
-			fmt.Println(c)
-			return
+		if found, err := m.t.check(c); err != nil {
+			return nil, err
+		} else if found {
+			return []card{c}, nil
 		}
 	}
 	for i := range m.h.cs {
 		if g := m.h.findGame(kindGame, i, true); g != nil {
-			fmt.Println(g)
-			return
+			return g, nil
 		}
 		if g := m.h.findGame(seqGame, i, true); g != nil {
-			fmt.Println(g)
-			return
+			return g, nil
 		}
 	}
-	fmt.Println("Not found")
+	return nil, nil
 }
 
 type table struct {
@@ -104,26 +131,36 @@ func newTable() *table {
 	return &table{nil, s}
 }
 
-func (t *table) newCard(c card) {
+func (t *table) newCard(c card) error {
 	insert(&t.cs, c)
-	t.s[c].update(noState, inTable)
+	return t.s[c].update(noState, inTable)
 }
 
-func (t *table) removeCard(c card) {
-	for i, tc := range t.cs {
-		if tc == c {
-			t.cs = append(t.cs[:i], t.cs[i+1:]...)
+func (t *table) removeCard(c card) error {
+	var i int
+	for i = 0; i < len(t.cs); i++ {
+		if t.cs[i] == c {
 			break
 		}
 	}
-	t.s[c].update(inTable, noState)
+	if i == len(t.cs) {
+		return fmt.Errorf("remove %v %v", t.cs, c)
+	}
+	t.cs = append(t.cs[:i], t.cs[i+1:]...)
+	return t.s[c].update(inTable, noState)
 }
 
-func (t *table) check(c card) bool {
-	t.newCard(c)
-	defer t.removeCard(c)
-	// defer log.Println(t.s)
+func (t *table) check(c card) (found bool, rerr error) {
+	if err := t.newCard(c); err != nil {
+		return false, err
+	}
+	defer func() {
+		if err := t.removeCard(c); err != nil {
+			rerr = err
+		}
+	}()
 	return newProcessing(t).check(0)
+	// log.Println(t.s)
 }
 
 func (t *table) findGame(ty gameType, i int, stopAtThree bool) []card {
@@ -187,15 +224,15 @@ func (ss *states) has(s state) bool {
 	return false
 }
 
-func (ss *states) update(from, to state) {
+func (ss *states) update(from, to state) error {
 	// log.Println("states", ss)
 	for i, s := range ss.ss {
 		if s == from {
 			ss.ss[i] = to
-			return
+			return nil
 		}
 	}
-	log.Fatal("No from found ", from, to)
+	return fmt.Errorf("No from found %v %v", from, to)
 }
 
 type state int
@@ -215,14 +252,14 @@ func newProcessing(t *table) *processing {
 	return &processing{nil, t}
 }
 
-func (p *processing) check(i int) bool {
+func (p *processing) check(i int) (bool, error) {
 	if i == len(p.t.cs) {
 		for _, c := range p.t.cs {
 			if p.t.s[c].has(inTable) {
-				return false
+				return false, nil
 			}
 		}
-		return true
+		return true, nil
 	}
 	c := p.t.cs[i]
 	log.Println("p.gs", p.gs)
@@ -231,47 +268,72 @@ func (p *processing) check(i int) bool {
 		log.Println("InTable")
 		return p.check(i + 1)
 	}
-	if p.buildGame(kindGame, i) {
-		return true
+	if found, err := p.buildGame(kindGame, i); err != nil {
+		return false, err
+	} else if found {
+		return true, nil
 	}
-	if p.buildGame(seqGame, i) {
-		return true
+	if found, err := p.buildGame(seqGame, i); err != nil {
+		return false, err
+	} else if found {
+		return true, nil
 	}
 	if c.number() == 1 {
 		return p.check(i + 1)
 	}
-	return false
+	return false, nil
 }
 
-func (p *processing) buildGame(ty gameType, i int) bool {
+func (p *processing) buildGame(ty gameType, i int) (bool, error) {
 	g := p.t.findGame(ty, i, false)
 	if g == nil {
-		return false
+		return false, nil
 	}
 	return p.addGame(i, g)
 }
 
-func (p *processing) addGame(i int, g []card) bool {
-	p.gs = append(p.gs, newGame(p.t, g))
-	defer p.destroyGame()
-	if p.check(i + 1) {
-		return true
+func (p *processing) addGame(i int, cs []card) (found bool, rerr error) {
+	g, err := newGame(p.t, cs)
+	if err != nil {
+		return false, err
 	}
-	for p.dropGame() {
-		if p.check(i + 1) {
-			return true
+	p.gs = append(p.gs, g)
+	defer func() {
+		if err := p.destroyGame(); err != nil {
+			rerr = err
+		}
+	}()
+	if found, err := p.check(i + 1); err != nil {
+		return false, err
+	} else if found {
+		return true, nil
+	}
+	kept, err := p.dropGame()
+	if err != nil {
+		return false, err
+	}
+	for kept {
+		if found, err := p.check(i + 1); err != nil {
+			return false, err
+		} else if found {
+			return true, nil
+		}
+		kept, err = p.dropGame()
+		if err != nil {
+			return false, err
 		}
 	}
-	return false
+	return false, nil
 }
 
-func (p *processing) destroyGame() {
+func (p *processing) destroyGame() error {
 	log.Println("destroy", len(p.gs))
-	p.gs[len(p.gs)-1].destroy()
+	g := p.gs[len(p.gs)-1]
 	p.gs = p.gs[:len(p.gs)-1]
+	return g.destroy()
 }
 
-func (p *processing) dropGame() bool {
+func (p *processing) dropGame() (bool, error) {
 	return p.gs[len(p.gs)-1].dropGame()
 }
 
@@ -280,30 +342,37 @@ type game struct {
 	cs []card
 }
 
-func newGame(t *table, cs []card) *game {
+func newGame(t *table, cs []card) (*game, error) {
 	for _, c := range cs {
-		t.s[c].update(inTable, inProcessing)
+		if err := t.s[c].update(inTable, inProcessing); err != nil {
+			return nil, err
+		}
 	}
-	return &game{t, cs}
+	return &game{t, cs}, nil
 }
 
 func (g *game) String() string {
 	return fmt.Sprintf("%v", g.cs)
 }
 
-func (g *game) destroy() {
+func (g *game) destroy() error {
 	for _, c := range g.cs {
-		g.t.s[c].update(inProcessing, inTable)
+		if err := g.t.s[c].update(inProcessing, inTable); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (g *game) dropGame() bool {
+func (g *game) dropGame() (bool, error) {
 	if len(g.cs) <= 3 {
-		return false
+		return false, nil
 	}
-	g.t.s[g.cs[len(g.cs)-1]].update(inProcessing, inTable)
+	if err := g.t.s[g.cs[len(g.cs)-1]].update(inProcessing, inTable); err != nil {
+		return false, err
+	}
 	g.cs = g.cs[:len(g.cs)-1]
-	return true
+	return true, nil
 }
 
 type gameType int
@@ -392,17 +461,4 @@ func insert(cs *[]card, c card) {
 	log.Println("insert", *cs, c, i)
 	*cs = append((*cs)[:i], append([]card{c}, (*cs)[i:]...)...)
 	log.Println("insert", *cs)
-}
-
-func remove(cs *[]card, c card) {
-	var i int
-	for i = 0; i < len(*cs); i++ {
-		if (*cs)[i] == c {
-			break
-		}
-	}
-	if i == len(*cs) {
-		log.Fatal("Remove unexisting")
-	}
-	*cs = append((*cs)[:i], (*cs)[i+1:]...)
 }
