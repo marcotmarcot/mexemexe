@@ -84,7 +84,7 @@ func main() {
 		default:
 			fmt.Println("Invalid command:", command)
 		}
-		fmt.Println("Status:", m.t, mh)
+		log.Println("Status:", m.t.cs, m.h.cs)
 	}
 }
 
@@ -98,12 +98,9 @@ func newMexemexe() *mexemexe {
 }
 
 func (m *mexemexe) findCard() ([]card, error) {
-	log.Println("findCard hand", m.h.cs)
-	log.Println("findCard table", m.t.cs)
 	for _, c := range m.h.cs {
-		log.Println("findCard", c)
 		if found, err := m.t.check(c); err != nil {
-			fmt.Println("findCard check", c)
+			log.Println("findCard check", c)
 			return nil, err
 		} else if found {
 			return []card{c}, nil
@@ -172,13 +169,11 @@ func (t *table) check(c card) (found bool, rerr error) {
 		}
 	}()
 	return newProcessing(t).check(0)
-	// log.Println(t.s)
 }
 
 func (t *table) findGame(ty gameType, i int, stopAtThree bool) []card {
 	var g []card
 	c := t.cs[i]
-	log.Println("findGame", c)
 	cn := c.number()
 	if ty == kindGame {
 		for s := 0; s < 4; s++ {
@@ -237,7 +232,6 @@ func (ss *states) has(s state) bool {
 }
 
 func (ss *states) update(from, to state) error {
-	// log.Println("states", ss)
 	for i, s := range ss.ss {
 		if s == from {
 			ss.ss[i] = to
@@ -271,11 +265,10 @@ func (p *processing) check(i int) (bool, error) {
 				return false, nil
 			}
 		}
+		log.Println("check", p.gs)
 		return true, nil
 	}
 	c := p.t.cs[i]
-	log.Println("p.gs", p.gs)
-	log.Println("check", i, len(p.t.cs), c)
 	if !p.t.s[c].has(inTable) {
 		log.Println("InTable")
 		return p.check(i + 1)
@@ -347,7 +340,6 @@ func (p *processing) addGame(i int, cs []card) (found bool, rerr error) {
 }
 
 func (p *processing) destroyGame() error {
-	log.Println("destroyGame", len(p.gs))
 	g := p.gs[len(p.gs)-1]
 	p.gs = p.gs[:len(p.gs)-1]
 	return g.destroy()
@@ -482,7 +474,5 @@ func insert(cs *[]card, c card) {
 			break
 		}
 	}
-	log.Println("insert", *cs, c, i)
 	*cs = append((*cs)[:i], append([]card{c}, (*cs)[i:]...)...)
-	log.Println("insert", *cs)
 }
