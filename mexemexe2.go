@@ -270,7 +270,6 @@ func (p *processing) check(i int) (bool, error) {
 	}
 	c := p.t.cs[i]
 	if !p.t.s[c].has(inTable) {
-		log.Println("InTable")
 		return p.check(i + 1)
 	}
 	if found, err := p.buildGame(kindGame, i); err != nil {
