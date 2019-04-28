@@ -1,4 +1,3 @@
-// * Check before adding the same card 3 times
 package main
 
 import (
@@ -85,6 +84,7 @@ func main() {
 		default:
 			fmt.Println("Invalid command:", command)
 		}
+		fmt.Println("Status:", m.t, mh)
 	}
 }
 
@@ -103,6 +103,7 @@ func (m *mexemexe) findCard() ([]card, error) {
 	for _, c := range m.h.cs {
 		log.Println("findCard", c)
 		if found, err := m.t.check(c); err != nil {
+			fmt.Println("findCard check", c)
 			return nil, err
 		} else if found {
 			return []card{c}, nil
@@ -161,10 +162,12 @@ func (t *table) removeCard(c card) error {
 
 func (t *table) check(c card) (found bool, rerr error) {
 	if err := t.newCard(c); err != nil {
+		log.Println("check newCard", c)
 		return false, err
 	}
 	defer func() {
 		if err := t.removeCard(c); err != nil {
+			log.Println("check removeCard", c)
 			rerr = err
 		}
 	}()
@@ -278,11 +281,13 @@ func (p *processing) check(i int) (bool, error) {
 		return p.check(i + 1)
 	}
 	if found, err := p.buildGame(kindGame, i); err != nil {
+		log.Println("check buildGame", kindGame, i)
 		return false, err
 	} else if found {
 		return true, nil
 	}
 	if found, err := p.buildGame(seqGame, i); err != nil {
+		log.Println("check buildGame", seqGame, i)
 		return false, err
 	} else if found {
 		return true, nil
@@ -304,31 +309,37 @@ func (p *processing) buildGame(ty gameType, i int) (bool, error) {
 func (p *processing) addGame(i int, cs []card) (found bool, rerr error) {
 	g, err := newGame(p.t, cs)
 	if err != nil {
+		log.Println("addGame", i, cs)
 		return false, err
 	}
 	p.gs = append(p.gs, g)
 	defer func() {
 		if err := p.destroyGame(); err != nil {
+			log.Println("addGame destroyGame", i, cs)
 			rerr = err
 		}
 	}()
 	if found, err := p.check(i + 1); err != nil {
+		log.Println("addGame check", i, cs)
 		return false, err
 	} else if found {
 		return true, nil
 	}
 	kept, err := p.dropGame()
 	if err != nil {
+		log.Println("addGame dropGame", i, cs)
 		return false, err
 	}
 	for kept {
 		if found, err := p.check(i + 1); err != nil {
+			log.Println("addGame check", i, cs)
 			return false, err
 		} else if found {
 			return true, nil
 		}
 		kept, err = p.dropGame()
 		if err != nil {
+			log.Println("addGame kept dropGame", i, cs)
 			return false, err
 		}
 	}
@@ -336,7 +347,7 @@ func (p *processing) addGame(i int, cs []card) (found bool, rerr error) {
 }
 
 func (p *processing) destroyGame() error {
-	log.Println("destroy", len(p.gs))
+	log.Println("destroyGame", len(p.gs))
 	g := p.gs[len(p.gs)-1]
 	p.gs = p.gs[:len(p.gs)-1]
 	return g.destroy()
